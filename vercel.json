@@ -8,7 +8,7 @@
   ],
   "routes": [
     {
-      "src": "/deploy",
+      "src": "/",
       "dest": "private/server.js"
     },
     {
@@ -16,8 +16,12 @@
       "dest": "private/server.js"
     },
     {
+      "src": "/deploy",
+      "dest": "private/server.js"
+    },
+    {
       "src": "/(.*)",
-      "dest": "public/index.html"
+      "dest": "private/server.js"
     }
   ]
 }
