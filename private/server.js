@@ -34,9 +34,9 @@ async function vercelRequest(
     options = {}
 ) {
 
-    if (!process.env.VERCEL_TOKEN) {
+    if (!process.env.BLACKBOX_VERCEL_TOKEN) {
         throw new Error(
-            "VERCEL_TOKEN is not configured."
+            "BLACKBOX_VERCEL_TOKEN is not configured."
         );
     }
 
@@ -47,7 +47,7 @@ async function vercelRequest(
 
             headers: {
                 Authorization:
-                    `Bearer ${process.env.VERCEL_TOKEN}`,
+                    `Bearer ${process.env.BLACKBOX_VERCEL_TOKEN}`,
 
                 "Content-Type":
                     "application/json",
@@ -470,7 +470,7 @@ app.post(
                CHECK TOKEN
             ----------------------------- */
 
-            if (!process.env.VERCEL_TOKEN) {
+            if (!process.env.BLACKBOX_VERCEL_TOKEN) {
 
                 return res.status(500).json({
                     error:
