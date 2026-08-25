@@ -991,8 +991,9 @@ app.post(
             ----------------------------- */
 
             const url =
-                `https://${name}.vercel.app`;
-
+    deployment.url
+        ? `https://${deployment.url}`
+        : null;
 
             return res.json({
 
