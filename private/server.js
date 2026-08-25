@@ -1,10 +1,10 @@
 const express = require("express");
 const multer = require("multer");
 const AdmZip = require("adm-zip");
+const path = require("path");
 
 const app = express();
 
-const PORT = process.env.PORT || 3000;
 const VERCEL_API = "https://api.vercel.com";
 
 const upload = multer({
@@ -20,9 +20,30 @@ const upload = multer({
    STATIC FRONTEND
 ========================================= */
 
-app.use(
-    express.static("public")
+const publicDirectory = path.join(
+    __dirname,
+    "../public"
 );
+
+app.use(
+    express.static(publicDirectory)
+);
+
+
+/* =========================================
+   ROOT
+========================================= */
+
+app.get("/", (req, res) => {
+
+    res.sendFile(
+        path.join(
+            publicDirectory,
+            "index.html"
+        )
+    );
+
+});
 
 
 /* =========================================
@@ -30,24 +51,29 @@ app.use(
 ========================================= */
 
 async function vercelRequest(
-    path,
+    apiPath,
     options = {}
 ) {
 
-    if (!process.env.BLACKBOX_VERCEL_TOKEN) {
+    const token =
+        process.env.BLACKBOX_VERCEL_TOKEN;
+
+    if (!token) {
+
         throw new Error(
             "BLACKBOX_VERCEL_TOKEN is not configured."
         );
     }
 
+
     const response = await fetch(
-        VERCEL_API + path,
+        VERCEL_API + apiPath,
         {
             ...options,
 
             headers: {
                 Authorization:
-                    `Bearer ${process.env.BLACKBOX_VERCEL_TOKEN}`,
+                    `Bearer ${token}`,
 
                 "Content-Type":
                     "application/json",
@@ -57,13 +83,20 @@ async function vercelRequest(
         }
     );
 
+
     let data = {};
 
     try {
-        data = await response.json();
+
+        data =
+            await response.json();
+
     } catch {
+
         data = {};
+
     }
+
 
     return {
         response,
@@ -73,7 +106,7 @@ async function vercelRequest(
 
 
 /* =========================================
-   PROJECT NAME VALIDATION
+   PROJECT NAME
 ========================================= */
 
 function normalizeProjectName(name) {
@@ -81,24 +114,21 @@ function normalizeProjectName(name) {
     return String(name || "")
         .trim()
         .toLowerCase();
+
 }
 
 
 function isValidProjectName(name) {
 
-    /*
-        Vercel project names are intentionally
-        restricted to a safe hostname-like format.
-    */
-
     return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(
         name
     );
+
 }
 
 
 /* =========================================
-   ZIP PATH SECURITY
+   ZIP PATH NORMALIZATION
 ========================================= */
 
 function normalizePath(filePath) {
@@ -114,25 +144,33 @@ function normalizePath(filePath) {
                 part !== ".."
         )
         .join("/");
+
 }
 
 
 /* =========================================
-   ENV FILE DETECTION
+   ENV FILE
 ========================================= */
 
 function isEnvFile(filePath) {
 
     const normalized =
-        filePath.toLowerCase();
+        normalizePath(filePath)
+            .toLowerCase();
+
+    const baseName =
+        path.posix.basename(
+            normalized
+        );
 
     return (
-        normalized === ".env" ||
-        normalized === ".env.local" ||
-        normalized === ".env.production" ||
-        normalized === ".env.development" ||
-        normalized === ".env.preview"
+        baseName === ".env" ||
+        baseName === ".env.local" ||
+        baseName === ".env.production" ||
+        baseName === ".env.development" ||
+        baseName === ".env.preview"
     );
+
 }
 
 
@@ -142,12 +180,17 @@ function isEnvFile(filePath) {
 
 function isIgnored(filePath) {
 
+    const normalized =
+        normalizePath(filePath);
+
     return (
-        filePath.startsWith(".git/") ||
-        filePath.startsWith("node_modules/") ||
-        filePath === ".git" ||
-        filePath === "node_modules"
+        normalized === ".git" ||
+        normalized.startsWith(".git/") ||
+
+        normalized === "node_modules" ||
+        normalized.startsWith("node_modules/")
     );
+
 }
 
 
@@ -162,57 +205,70 @@ function parseEnv(content) {
     const lines =
         String(content || "")
             .replace(/\r\n/g, "\n")
+            .replace(/\r/g, "\n")
             .split("\n");
 
-    for (let line of lines) {
+
+    for (
+        let line of lines
+    ) {
 
         line = line.trim();
+
 
         if (!line) {
             continue;
         }
 
+
         if (line.startsWith("#")) {
             continue;
         }
 
-        /*
-            Support:
 
-            KEY=value
-            KEY="value"
-            KEY='value'
-        */
+        if (
+            line.startsWith("export ")
+        ) {
 
-        if (line.startsWith("export ")) {
             line =
-                line.slice(7).trim();
+                line
+                    .slice(7)
+                    .trim();
+
         }
+
 
         const equals =
             line.indexOf("=");
 
+
         if (equals === -1) {
             continue;
         }
+
 
         const key =
             line
                 .slice(0, equals)
                 .trim();
 
+
         let value =
             line
                 .slice(equals + 1)
                 .trim();
+
 
         if (
             !/^[A-Za-z_][A-Za-z0-9_]*$/.test(
                 key
             )
         ) {
+
             continue;
+
         }
+
 
         if (
             (
@@ -227,29 +283,36 @@ function parseEnv(content) {
 
             value =
                 value.slice(1, -1);
+
         }
 
+
         variables[key] = value;
+
     }
+
 
     return variables;
 }
 
 
 /* =========================================
-   PARSE ENV TEXT FROM UI
+   ENV FROM WEBSITE
 ========================================= */
 
 function parseEnvironmentText(
     content
 ) {
 
-    return parseEnv(content);
+    return parseEnv(
+        content
+    );
+
 }
 
 
 /* =========================================
-   CHECK PROJECT NAME
+   CHECK SUBDOMAIN
 ========================================= */
 
 app.get(
@@ -270,25 +333,36 @@ app.get(
                     error:
                         "Subdomain is required."
                 });
+
             }
 
 
-            if (!isValidProjectName(name)) {
+            if (
+                !isValidProjectName(
+                    name
+                )
+            ) {
 
                 return res.status(400).json({
                     error:
                         "Invalid subdomain. Use only lowercase letters, numbers, and hyphens."
                 });
+
             }
 
 
             const {
                 response,
                 data
-            } = await vercelRequest(
-                "/v9/projects/" +
-                encodeURIComponent(name)
-            );
+            } =
+                await vercelRequest(
+                    "/v9/projects/" +
+                    encodeURIComponent(name)
+                );
+
+
+            const url =
+                `https://${name}.vercel.app`;
 
 
             if (response.ok) {
@@ -299,18 +373,16 @@ app.get(
 
                     name,
 
-                    url:
-                        `https://${name}.vercel.app`
+                    url
+
                 });
+
             }
 
 
-            /*
-                A 404 means the project does not
-                currently exist for this token/team.
-            */
-
-            if (response.status === 404) {
+            if (
+                response.status === 404
+            ) {
 
                 return res.json({
 
@@ -318,9 +390,10 @@ app.get(
 
                     name,
 
-                    url:
-                        `https://${name}.vercel.app`
+                    url
+
                 });
+
             }
 
 
@@ -331,6 +404,7 @@ app.get(
                 error:
                     data?.error?.message ||
                     "Unable to check subdomain."
+
             });
 
         } catch (error) {
@@ -340,12 +414,17 @@ app.get(
                 error
             );
 
+
             return res.status(500).json({
+
                 error:
                     error.message ||
                     "Internal server error."
+
             });
+
         }
+
     }
 );
 
@@ -361,16 +440,17 @@ async function createProject(
     const {
         response,
         data
-    } = await vercelRequest(
-        "/v10/projects",
-        {
-            method: "POST",
+    } =
+        await vercelRequest(
+            "/v10/projects",
+            {
+                method: "POST",
 
-            body: JSON.stringify({
-                name
-            })
-        }
-    );
+                body: JSON.stringify({
+                    name
+                })
+            }
+        );
 
 
     if (!response.ok) {
@@ -381,13 +461,17 @@ async function createProject(
                 "Failed to create Vercel project."
             );
 
+
         error.status =
             response.status;
+
 
         error.vercel =
             data;
 
+
         throw error;
+
     }
 
 
@@ -408,52 +492,79 @@ async function addEnvironmentVariable(
     const {
         response,
         data
-    } = await vercelRequest(
-        `/v10/projects/${encodeURIComponent(projectId)}/env`,
-        {
-            method: "POST",
+    } =
+        await vercelRequest(
+            `/v10/projects/${encodeURIComponent(projectId)}/env`,
+            {
+                method: "POST",
 
-            body: JSON.stringify({
+                body: JSON.stringify({
 
-                key,
+                    key,
 
-                value,
+                    value,
 
-                type: "encrypted",
+                    type: "encrypted",
 
-                target: [
-                    "production",
-                    "preview",
-                    "development"
-                ]
-            })
-        }
-    );
+                    target: [
+                        "production",
+                        "preview",
+                        "development"
+                    ]
 
-
-    /*
-        If the variable already exists,
-        update it instead of failing the
-        whole deployment.
-    */
-
-    if (
-        !response.ok &&
-        response.status !== 409
-    ) {
-
-        throw new Error(
-            data?.error?.message ||
-            `Failed to add environment variable: ${key}`
+                })
+            }
         );
+
+
+    if (!response.ok) {
+
+        /*
+         * 409 = variable already exists.
+         *
+         * We don't silently pretend it was
+         * updated. The deployment can still
+         * continue because the variable already
+         * exists on the project.
+         */
+
+        if (
+            response.status === 409
+        ) {
+
+            return {
+                exists: true
+            };
+
+        }
+
+
+        const error =
+            new Error(
+                data?.error?.message ||
+                `Failed to add environment variable: ${key}`
+            );
+
+
+        error.status =
+            response.status;
+
+
+        error.vercel =
+            data;
+
+
+        throw error;
+
     }
+
 
     return data;
 }
 
 
 /* =========================================
-   DEPLOY ZIP
+   DEPLOY
 ========================================= */
 
 app.post(
@@ -462,33 +573,39 @@ app.post(
 
     async (req, res) => {
 
-        let project = null;
-
         try {
 
             /* -----------------------------
-               CHECK TOKEN
+               TOKEN
             ----------------------------- */
 
-            if (!process.env.BLACKBOX_VERCEL_TOKEN) {
+            if (
+                !process.env.BLACKBOX_VERCEL_TOKEN
+            ) {
 
                 return res.status(500).json({
+
                     error:
-                        "VERCEL_TOKEN is not configured."
+                        "BLACKBOX_VERCEL_TOKEN is not configured."
+
                 });
+
             }
 
 
             /* -----------------------------
-               CHECK ZIP
+               ZIP
             ----------------------------- */
 
             if (!req.file) {
 
                 return res.status(400).json({
+
                     error:
                         "No ZIP file was uploaded."
+
                 });
+
             }
 
 
@@ -503,9 +620,12 @@ app.post(
             ) {
 
                 return res.status(400).json({
+
                     error:
                         "Only ZIP files are supported."
+
                 });
+
             }
 
 
@@ -522,18 +642,26 @@ app.post(
             if (!name) {
 
                 return res.status(400).json({
+
                     error:
                         "Subdomain is required."
+
                 });
+
             }
 
 
-            if (!isValidProjectName(name)) {
+            if (
+                !isValidProjectName(name)
+            ) {
 
                 return res.status(400).json({
+
                     error:
-                        "Invalid subdomain."
+                        "Invalid subdomain. Use only lowercase letters, numbers, and hyphens."
+
                 });
+
             }
 
 
@@ -541,10 +669,25 @@ app.post(
                READ ZIP
             ----------------------------- */
 
-            const zip =
-                new AdmZip(
-                    req.file.buffer
-                );
+            let zip;
+
+            try {
+
+                zip =
+                    new AdmZip(
+                        req.file.buffer
+                    );
+
+            } catch {
+
+                return res.status(400).json({
+
+                    error:
+                        "The uploaded file is not a valid ZIP."
+
+                });
+
+            }
 
 
             const entries =
@@ -564,8 +707,12 @@ app.post(
                 const entry of entries
             ) {
 
-                if (entry.isDirectory) {
+                if (
+                    entry.isDirectory
+                ) {
+
                     continue;
+
                 }
 
 
@@ -580,15 +727,19 @@ app.post(
                 }
 
 
-                if (isIgnored(filePath)) {
+                if (
+                    isIgnored(filePath)
+                ) {
+
                     continue;
+
                 }
 
 
                 /*
-                    .env is NEVER uploaded
-                    to the deployment.
-                */
+                 * .env files are NEVER
+                 * uploaded to Vercel.
+                 */
 
                 if (
                     isEnvFile(filePath)
@@ -597,7 +748,9 @@ app.post(
                     const envContent =
                         entry
                             .getData()
-                            .toString("utf8");
+                            .toString(
+                                "utf8"
+                            );
 
 
                     const parsed =
@@ -613,6 +766,7 @@ app.post(
 
 
                     continue;
+
                 }
 
 
@@ -632,26 +786,32 @@ app.post(
 
                     encoding:
                         "base64"
+
                 });
+
             }
 
 
             /* -----------------------------
-               CHECK FILES
+               DEPLOYABLE FILE CHECK
             ----------------------------- */
 
-            if (files.length === 0) {
+            if (
+                files.length === 0
+            ) {
 
                 return res.status(400).json({
+
                     error:
                         "The ZIP contains no deployable files."
+
                 });
+
             }
 
 
             /* -----------------------------
                CHECK PROJECT AGAIN
-               TO REDUCE RACE CONDITIONS
             ----------------------------- */
 
             const existing =
@@ -661,18 +821,23 @@ app.post(
                 );
 
 
-            if (existing.response.ok) {
+            if (
+                existing.response.ok
+            ) {
 
                 return res.status(409).json({
 
                     error:
                         "Subdomain is already in use.",
 
-                    warning: true,
+                    warning:
+                        true,
 
                     url:
                         `https://${name}.vercel.app`
+
                 });
+
             }
 
 
@@ -691,7 +856,9 @@ app.post(
                             ?.error
                             ?.message ||
                         "Could not verify subdomain."
+
                 });
+
             }
 
 
@@ -699,7 +866,7 @@ app.post(
                CREATE PROJECT
             ----------------------------- */
 
-            project =
+            const project =
                 await createProject(
                     name
                 );
@@ -707,6 +874,15 @@ app.post(
 
             const projectId =
                 project.id;
+
+
+            /* -----------------------------
+               ENV FROM ZIP
+            ----------------------------- */
+
+            const environmentVariables = {
+                ...zipEnvironment
+            };
 
 
             /* -----------------------------
@@ -720,19 +896,18 @@ app.post(
 
 
             /*
-                UI variables overwrite
-                variables from ZIP when
-                they have the same name.
-            */
+             * UI variables override
+             * variables from .env.
+             */
 
-            const environmentVariables = {
-                ...zipEnvironment,
-                ...uiEnvironment
-            };
+            Object.assign(
+                environmentVariables,
+                uiEnvironment
+            );
 
 
             /* -----------------------------
-               ADD ENV VARIABLES
+               ADD ENV
             ----------------------------- */
 
             let envCount = 0;
@@ -751,12 +926,14 @@ app.post(
                     value
                 );
 
+
                 envCount++;
+
             }
 
 
             /* -----------------------------
-               DEPLOY
+               CREATE DEPLOYMENT
             ----------------------------- */
 
             const {
@@ -765,52 +942,52 @@ app.post(
 
                 data:
                     deployment
-            } = await vercelRequest(
-                "/v13/deployments",
-                {
-                    method: "POST",
+            } =
+                await vercelRequest(
+                    "/v13/deployments",
+                    {
+                        method: "POST",
 
-                    body: JSON.stringify({
+                        body:
+                            JSON.stringify({
 
-                        name,
+                                name,
 
-                        project:
-                            name,
+                                project:
+                                    name,
 
-                        files,
+                                files,
 
-                        projectSettings: {
-                            framework: null
-                        }
-                    })
-                }
-            );
+                                projectSettings: {
+                                    framework: null
+                                }
+
+                            })
+                    }
+                );
 
 
             if (
                 !deploymentResponse.ok
             ) {
 
-                return res
-                    .status(
-                        deploymentResponse.status
-                    )
-                    .json({
+                return res.status(
+                    deploymentResponse.status
+                ).json({
 
-                        error:
-                            deployment
-                                ?.error
-                                ?.message ||
-                            "Vercel deployment failed.",
+                    error:
+                        deployment
+                            ?.error
+                            ?.message ||
+                        "Vercel deployment failed."
 
-                        details:
-                            deployment
-                    });
+                });
+
             }
 
 
             /* -----------------------------
-               URL
+               RESULT
             ----------------------------- */
 
             const url =
@@ -819,7 +996,8 @@ app.post(
 
             return res.json({
 
-                success: true,
+                success:
+                    true,
 
                 id:
                     deployment.id,
@@ -832,6 +1010,7 @@ app.post(
 
                 environmentVariables:
                     envCount
+
             });
 
         } catch (error) {
@@ -842,11 +1021,6 @@ app.post(
             );
 
 
-            /*
-                Don't expose the Vercel
-                token or request headers.
-            */
-
             return res.status(
                 error.status || 500
             ).json({
@@ -854,14 +1028,17 @@ app.post(
                 error:
                     error.message ||
                     "Deployment failed."
+
             });
+
         }
+
     }
 );
 
 
 /* =========================================
-   MULTER ERRORS
+   MULTER ERROR HANDLER
 ========================================= */
 
 app.use(
@@ -872,40 +1049,45 @@ app.use(
             "LIMIT_FILE_SIZE"
         ) {
 
-            return res
-                .status(413)
-                .json({
+            return res.status(413).json({
 
-                    error:
-                        "ZIP file is too large. Maximum size is 50 MB."
-                });
+                error:
+                    "ZIP file is too large. Maximum size is 50 MB."
+
+            });
+
         }
 
 
-        console.error(error);
+        console.error(
+            "Upload error:",
+            error
+        );
 
 
-        return res
-            .status(500)
-            .json({
+        return res.status(500).json({
 
-                error:
-                    "Upload failed."
-            });
+            error:
+                "Upload failed."
+
+        });
+
     }
 );
 
 
 /* =========================================
-   START
+   VERCEL SERVERLESS EXPORT
 ========================================= */
 
-app.listen(
-    PORT,
-    () => {
+/*
+ * IMPORTANT:
+ *
+ * No PORT.
+ * No app.listen().
+ *
+ * Vercel invokes this Express app
+ * as a serverless function.
+ */
 
-        console.log(
-            `BlackBox running on port ${PORT}`
-        );
-    }
-);
+module.exports = app;
