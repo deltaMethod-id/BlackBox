@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>BlackBox</title>
+
+    <link
+        rel="icon"
+        type="image/png"
+        href="icon.png"
+    >
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+
+            background: #000;
+            color: #fff;
+
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+
+            display: flex;
+            justify-content: center;
+
+            padding: 40px 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 650px;
+        }
+
+        .title {
+            font-size: 42px;
+            font-weight: 800;
+            letter-spacing: -2px;
+        }
+
+        .description {
+            margin-top: 8px;
+            margin-bottom: 30px;
+
+            color: #888;
+        }
+
+        .section {
+            margin-bottom: 18px;
+        }
+
+        .label {
+            display: block;
+
+            margin-bottom: 8px;
+
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+
+            border: 1px solid #252525;
+            border-radius: 10px;
+
+            background: #0b0b0b;
+            color: #fff;
+
+            padding: 13px;
+
+            outline: none;
+
+            font-family: inherit;
+        }
+
+        input:focus,
+        textarea:focus {
+            border-color: #555;
+        }
+
+        textarea {
+            min-height: 130px;
+
+            resize: vertical;
+
+            font-family:
+                monospace;
+        }
+
+        .subdomain-wrapper {
+            display: flex;
+            align-items: center;
+        }
+
+        .subdomain-wrapper input {
+            border-radius: 10px 0 0 10px;
+        }
+
+        .suffix {
+            height: 46px;
+
+            display: flex;
+            align-items: center;
+
+            padding: 0 14px;
+
+            background: #151515;
+
+            border: 1px solid #252525;
+            border-left: 0;
+
+            border-radius:
+                0 10px 10px 0;
+
+            color: #888;
+
+            white-space: nowrap;
+        }
+
+        .hint {
+            margin-top: 7px;
+
+            color: #666;
+            font-size: 12px;
+        }
+
+        input[type="file"] {
+            padding: 12px;
+        }
+
+        button {
+            width: 100%;
+
+            margin-top: 8px;
+
+            padding: 14px;
+
+            border: 0;
+            border-radius: 10px;
+
+            background: #fff;
+            color: #000;
+
+            font-size: 15px;
+            font-weight: 800;
+
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #ddd;
+        }
+
+        button:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 18px;
+
+            padding: 15px;
+
+            border: 1px solid #222;
+            border-radius: 10px;
+
+            background: #0b0b0b;
+
+            color: #aaa;
+
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .status.warning {
+            color: #ffd166;
+            border-color: #66551f;
+        }
+
+        .status.error {
+            color: #ff6b6b;
+            border-color: #662222;
+        }
+
+        .status.success {
+            color: #fff;
+            border-color: #333;
+        }
+
+        .result-link {
+            display: block;
+
+            margin-top: 10px;
+
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+
+<main class="container">
+
+    <div class="title">
+        BlackBox
+    </div>
+
+    <div class="description">
+        Deploy ZIP projects directly to Vercel.
+    </div>
+
+
+    <!-- ZIP -->
+
+    <div class="section">
+
+        <label
+            class="label"
+            for="zipFile"
+        >
+            Project ZIP
+        </label>
+
+        <input
+            id="zipFile"
+            type="file"
+            accept=".zip,application/zip"
+        >
+
+    </div>
+
+
+    <!-- SUBDOMAIN -->
+
+    <div class="section">
+
+        <label
+            class="label"
+            for="subdomain"
+        >
+            Subdomain
+        </label>
+
+        <div class="subdomain-wrapper">
+
+            <input
+                id="subdomain"
+                type="text"
+                placeholder="my-project"
+                autocomplete="off"
+            >
+
+            <div class="suffix">
+                .vercel.app
+            </div>
+
+        </div>
+
+        <div class="hint">
+            Example: my-project.vercel.app
+        </div>
+
+    </div>
+
+
+    <!-- ENV -->
+
+    <div class="section">
+
+        <label
+            class="label"
+            for="environment"
+        >
+            Environment Variables
+        </label>
+
+        <textarea
+            id="environment"
+            placeholder="API_KEY=example
+DATABASE_URL=example
+NODE_ENV=production"
+        ></textarea>
+
+        <div class="hint">
+            One variable per line:
+            KEY=VALUE
+        </div>
+
+    </div>
+
+
+    <button
+        id="checkButton"
+        type="button"
+    >
+        Check Subdomain
+    </button>
+
+    <button
+        id="deployButton"
+        type="button"
+        disabled
+    >
+        Deploy to Vercel
+    </button>
+
+
+    <div
+        id="status"
+        class="status"
+    >
+        Select a ZIP and choose a subdomain.
+    </div>
+
+</main>
+
+
+<script>
+
+const zipFile =
+    document.getElementById(
+        "zipFile"
+    );
+
+const subdomain =
+    document.getElementById(
+        "subdomain"
+    );
+
+const environment =
+    document.getElementById(
+        "environment"
+    );
+
+const checkButton =
+    document.getElementById(
+        "checkButton"
+    );
+
+const deployButton =
+    document.getElementById(
+        "deployButton"
+    );
+
+const status =
+    document.getElementById(
+        "status"
+    );
+
+
+let subdomainAvailable = false;
+
+
+function setStatus(
+    message,
+    type = ""
+) {
+
+    status.className =
+        "status " + type;
+
+    status.textContent =
+        message;
+}
+
+
+/*
+    Check subdomain
+*/
+
+checkButton.addEventListener(
+    "click",
+    async () => {
+
+        const name =
+            subdomain.value.trim();
+
+
+        if (!name) {
+
+            setStatus(
+                "Enter a subdomain first.",
+                "warning"
+            );
+
+            deployButton.disabled =
+                true;
+
+            subdomainAvailable =
+                false;
+
+            return;
+        }
+
+
+        checkButton.disabled =
+            true;
+
+        deployButton.disabled =
+            true;
+
+        subdomainAvailable =
+            false;
+
+
+        setStatus(
+            "Checking subdomain..."
+        );
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/check-name?name=" +
+                    encodeURIComponent(name)
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "Could not check subdomain."
+                );
+            }
+
+
+            if (data.available) {
+
+                subdomainAvailable =
+                    true;
+
+                setStatus(
+                    "Subdomain is available:\n\n" +
+                    data.url,
+                    "success"
+                );
+
+                deployButton.disabled =
+                    false;
+
+            } else {
+
+                setStatus(
+                    "Warning: this subdomain is already in use.\n\n" +
+                    data.url,
+                    "warning"
+                );
+
+                deployButton.disabled =
+                    true;
+            }
+
+        } catch (error) {
+
+            setStatus(
+                "Error: " +
+                error.message,
+                "error"
+            );
+
+        } finally {
+
+            checkButton.disabled =
+                false;
+        }
+    }
+);
+
+
+/*
+    Deploy
+*/
+
+deployButton.addEventListener(
+    "click",
+    async () => {
+
+        const file =
+            zipFile.files[0];
+
+        const name =
+            subdomain.value.trim();
+
+
+        if (!file) {
+
+            setStatus(
+                "Select a ZIP file first.",
+                "warning"
+            );
+
+            return;
+        }
+
+
+        if (
+            !file.name
+                .toLowerCase()
+                .endsWith(".zip")
+        ) {
+
+            setStatus(
+                "Only ZIP files are supported.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        if (!subdomainAvailable) {
+
+            setStatus(
+                "Check the subdomain before deploying.",
+                "warning"
+            );
+
+            return;
+        }
+
+
+        deployButton.disabled =
+            true;
+
+        checkButton.disabled =
+            true;
+
+
+        setStatus(
+            "Uploading project..."
+        );
+
+
+        try {
+
+            const formData =
+                new FormData();
+
+
+            formData.append(
+                "file",
+                file
+            );
+
+
+            formData.append(
+                "name",
+                name
+            );
+
+
+            formData.append(
+                "environment",
+                environment.value
+            );
+
+
+            setStatus(
+                "Uploading ZIP and processing environment variables..."
+            );
+
+
+            const response =
+                await fetch(
+                    "/deploy",
+                    {
+                        method: "POST",
+                        body: formData
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    "Deployment failed."
+                );
+            }
+
+
+            setStatus(
+                "Deployment successful!\n\n" +
+                "URL: " +
+                data.url +
+                "\n\n" +
+                "Environment variables: " +
+                (data.environmentVariables || 0),
+                "success"
+            );
+
+
+            if (data.url) {
+
+                const link =
+                    document.createElement(
+                        "a"
+                    );
+
+                link.href =
+                    data.url;
+
+                link.target =
+                    "_blank";
+
+                link.rel =
+                    "noopener noreferrer";
+
+                link.className =
+                    "result-link";
+
+                link.textContent =
+                    "Open deployment";
+
+
+                status.appendChild(
+                    link
+                );
+            }
+
+
+        } catch (error) {
+
+            setStatus(
+                "Error: " +
+                error.message,
+                "error"
+            );
+
+        } finally {
+
+            deployButton.disabled =
+                false;
+
+            checkButton.disabled =
+                false;
+        }
+    }
+);
+
+</script>
+
+</body>
+</html>
